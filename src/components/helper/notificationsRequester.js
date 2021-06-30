@@ -14,21 +14,22 @@ let state;
 const RESEND_INTERVAL = 60; // seconds
 
 const getTargetStat = (containerObject, notificationSettingType) => {
+  // note: this was previously returning an error because each conditional was trying to access a property on the containerObject that did not exist
+  // e.g., containerObject.mp, containerObject.cpu, etc.
+  // fix was to change it to actual properties, like containerObject.MemPerc, containerObject.CPUPerc, etc.
   if (notificationSettingType === categories.MEMORY)
-    return parseFloat(containerObject.mp.replace('%', ''));
+    return parseFloat(containerObject.MemPerc.replace('%', ''));
   if (notificationSettingType === categories.CPU)
-    return parseFloat(containerObject.cpu.replace('%', ''));
+    return parseFloat(containerObject.CPUPerc.replace('%', ''));
   if (notificationSettingType === categories.STOPPED) return 1;
 };
 
 const getContainerObject = (containerList, containerId) => {
-  // console.log('GET CONTAINER OBJECT: ', containerList, containerId);
   for (let i = 0; i < containerList.length; i += 1) {
     const containerObject = containerList[i];
-    // console.log('containerObject: ', containerList[i]);
-    // console.log('CID: ', containerObject.cid);
-    // console.log('ID: ', containerObject.ID);
-    if (containerObject.cid === containerId) return containerObject;
+    // note: this conditional was previously checking for containerObject.cid === containerId, but cid is not a property on containerObject, resulting in undefined being returned every time.
+    // changed from containerObject.cid to containerObject.ID
+    if (containerObject.ID === containerId) return containerObject;
   }
   // container not present in container list (ex: running or stopped notificationList)
   return undefined;
@@ -77,7 +78,7 @@ const sendNotification = async (
 ) => {
   // request notification
   const body = {
-    mobileNumber: state.notificationList.phoneNumber,
+    mobileNumber: state.session.phone,
     triggeringEvent: constructNotificationMessage(
       notificationType,
       stat,
@@ -109,16 +110,11 @@ const checkForNotifications = (
   containerList,
   triggeringValue
 ) => {
-  if(notificationType === 'MEMORY'){
-    console.log('checkForNotifications: ', notificationType, ' ', triggeringValue);
-    console.log(containerList, notificationType);
-    console.log('notificationSettingsSet: ', notificationSettingsSet);
-  }
   // scan notification settings
   notificationSettingsSet.forEach((containerId) => {
     // check container metrics if it is seen in either runningList or stoppedList
     const containerObject = getContainerObject(containerList, containerId);
-    // console.log('CONTAINER OBJECT ', notificationType, containerObject);
+    
     if (containerObject) {
       // gets the stat/metric on the container that we want to test
       const stat = getTargetStat(containerObject, notificationType);
@@ -192,14 +188,14 @@ export default function start() {
       state.notificationList.memoryNotificationList,
       categories.MEMORY,
       state.containersList.runningList,
-      state.session.cpu_threshold // triggering value
+      state.session.mem_threshold // triggering value
     );
     // check if any containers register to cpu notification exceed triggering cpu value
     checkForNotifications(
       state.notificationList.cpuNotificationList,
       categories.CPU,
       state.containersList.runningList,
-      state.session.mem_threshold // triggering value
+      state.session.cpu_threshold // triggering value
     );
     // check if any containers register to stopped notification trigger notification
     checkForNotifications(
